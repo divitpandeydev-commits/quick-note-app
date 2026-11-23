@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Note Application</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <h1>Quick Note Application</h1>
+    <p class="subtitle">Write a note, save it, and see it stored and listed below.</p>
+
+    <section class="card">
+      <h2>New Note</h2>
+      <textarea id="note-input" rows="3" placeholder="Type your note here..."></textarea>
+      <button id="save-btn" type="button">Save Note</button>
+      <p id="form-error" class="error" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Your Saved Notes</h2>
+      <ul id="notes-list" class="notes"></ul>
+      <p id="empty-msg" class="muted">No notes yet. Write your first note above.</p>
+    </section>
+  </main>
+
+  <script>
+    const noteInput = document.getElementById('note-input');
+    const saveBtn = document.getElementById('save-btn');
+    const notesList = document.getElementById('notes-list');
+    const emptyMsg = document.getElementById('empty-msg');
+    const formError = document.getElementById('form-error');
+
+    function showError(msg) {
+      formError.textContent = msg;
+      formError.hidden = !msg;
+    }
+
+    function formatTime(iso) {
+      return new Date(iso).toLocaleString();
+    }
+
+    async function loadNotes() {
+      const res = await fetch('/api/notes');
+      const notes = await res.json();
+      notesList.innerHTML = '';
+      emptyMsg.hidden = notes.length > 0;
+      notes.forEach(note => {
+        const li = document.createElement('li');
+        li.className = 'note';
+
+        const text = document.createElement('p');
+        text.className = 'note-text';
+        text.textContent = note.text;
+
+        const meta = document.createElement('span');
+        meta.className = 'note-time';
+        meta.textContent = formatTime(note.created_at);
+
+        const actions = document.createElement('div');
+        actions.className = 'note-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'icon-btn';
+        editBtn.title = 'Edit note';
+        editBtn.textContent = '✎';
+        editBtn.addEventListener('click', () => editNote(note));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'icon-btn';
+        deleteBtn.title = 'Delete note';
+        deleteBtn.textContent = '🗑';
+        deleteBtn.addEventListener('click', () => deleteNote(note.id));
+
+        actions.append(editBtn, deleteBtn);
+        li.append(text, meta, actions);
+        notesList.appendChild(li);
+      });
+    }
+
+    async function saveNote() {
+      const text = noteInput.value.trim();
+      if (!text) {
+        showError('Please type a note before saving.');
+        return;
+      }
+      showError('');
+      const res = await fetch('/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        showError(data.error || 'Could not save the note.');
+        return;
+      }
+      noteInput.value = '';
+      await loadNotes();
+    }
+
+    async function editNote(note) {
+      const updated = prompt('Edit note:', note.text);
+      if (updated === null) return;
+      const text = updated.trim();
+      if (!text) {
+        alert('Note text cannot be empty.');
+        return;
+      }
+      const res = await fetch(`/api/notes/${note.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) alert('Could not update the note.');
+      await loadNotes();
+    }
+
+    async function deleteNote(id) {
+      if (!confirm('Delete this note?')) return;
+      const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+      if (!res.ok) alert('Could not delete the note.');
+      await loadNotes();
+    }
+
+    saveBtn.addEventListener('click', saveNote);
+    noteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveNote();
+    });
+
+    loadNotes();
+  </script>
+</body>
+</html>
